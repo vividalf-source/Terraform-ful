@@ -1,0 +1,123 @@
+# 🛠️ Guía Rápida de Modificaciones y Escalabilidad en Terraform
+
+Esta sección funciona como un **mapa rápido de cambios** para adaptar la infraestructura ante nuevos requerimientos (más servidores, subredes, puertos, bases de datos o reglas por ambiente) sin romper el código existente.
+
+---
+
+## 🗺️ 1. ¿Qué Archivo Debo Tocar Según lo que Pidan?
+
+| Requerimiento / Cambio Solicitado | Archivo a Editar | ¿Qué se modifica exactamente? |
+| :--- | :--- | :--- |
+| **Agregar más instancias EC2** (ej. pasar de 3 a 4) | `terraform.tfvars` | Agregar una nueva clave dentro del mapa `servidores` (ej. `biblioteca-d`). |
+| **Agregar más subredes** (ej. pasar de 4 a 6) | `terraform.tfvars` | Agregar nuevas claves en el mapa `subredes` (ej. `pub_3`, `priv_3`) con CIDR únicos. |
+| **Cambiar tamaño de disco o tipo de instancia** | `terraform.tfvars` | Modificar `instance_type` o `disk_size` en el servidor correspondiente. |
+| **Cambiar el ambiente por defecto** (`dev` / `prod`) | `terraform.tfvars` | Cambiar `ambiente = "dev"` a `"prod"` (o pasarlo por consola con `-var`). |
+| **Cambiar reglas condicionales de `prod`** | `main.tf` (o `locals.tf`) | Editar los operadores ternarios (`var.ambiente == "prod" ? X : Y`). |
+| **Abrir o cerrar puertos** (ej. HTTPS `443`, SSH `22`) | `main.tf` | Agregar o editar bloques `ingress` dentro de `aws_security_group`. |
+| **Agregar una segunda Base de Datos (RDS)** | `main.tf` + `outputs.tf` | Duplicar el bloque `aws_db_instance` (cambiando el `identifier`) o usar `for_each`. |
+| **Crear una variable nueva desde cero** | `variable.tf` + `terraform.tfvars` | Declarar el bloque `variable` en `variable.tf` y darle valor en `terraform.tfvars`. |
+| **Mostrar nuevos datos al finalizar el `apply`** | `outputs.tf` | Agregar un nuevo bloque `output` (ej. IPs públicas de las EC2). |
+
+---
+
+## ✅ 2. Lo que SÍ y lo que NO Debes Hacer
+
+### ✔️ Lo que SÍ debes hacer
+* **Usar siempre `terraform.tfvars` para escalar EC2 y Subredes:** Como el código usa `for_each`, basta con agregar elementos a los mapas en este archivo.
+* **Verificar que los bloques CIDR no se repitan:** Si ya usas `10.0.1.0/24` hasta `10.0.4.0/24`, las siguientes subredes deben ser `10.0.5.0/24`, `10.0.6.0/24`, etc.
+* **Repartir las subredes en distintas Zonas de Disponibilidad (`az`):** Usa `us-east-1a`, `us-east-1b` y `us-east-1c` para que el **NLB** y **RDS** funcionen sin errores.
+* **Validar antes de aplicar:** Ejecuta siempre `terraform fmt -recursive` y `terraform validate` después de editar cualquier archivo.
+
+### ❌ Lo que NO debes hacer
+* **NO dupliques bloques `resource "aws_instance"` ni `resource "aws_subnet"` en `main.tf`:** Ya están automatizados con `for_each`. Duplicarlos causará conflictos de nombres y recursos huérfanos.
+* **NO escribas contraseñas en `terraform.tfvars`, `variable.tf` ni `main.tf`:** Usa siempre la variable de entorno `$env:TF_VAR_db_password="..."`.
+* **NO pongas nombres de Security Group empezando por `sg-`:** AWS prohíbe que el atributo `name` de un `aws_security_group` comience con `sg-` (usa `secgroup-web` o `web-sg`).
+* **NO apuntes una EC2 pública a una subred privada (`priv_1`):** Si la instancia debe recibir tráfico del NLB o conectarse desde Internet, su atributo `subred` debe apuntar a `pub_1`, `pub_2` o `pub_3`.
+
+---
+
+## 🧩 3. Ejemplos Listos para Copiar y Pegar
+
+### A. Escalar a 6 Subredes y 4 Servidores EC2 (`terraform.tfvars`)
+```hcl
+subredes = {
+  pub_1  = { cidr = "10.0.1.0/24", az = "us-east-1a", publica = true }
+  pub_2  = { cidr = "10.0.2.0/24", az = "us-east-1b", publica = true }
+  pub_3  = { cidr = "10.0.5.0/24", az = "us-east-1c", publica = true }
+  priv_1 = { cidr = "10.0.3.0/24", az = "us-east-1a", publica = false }
+  priv_2 = { cidr = "10.0.4.0/24", az = "us-east-1b", publica = false }
+  priv_3 = { cidr = "10.0.6.0/24", az = "us-east-1c", publica = false }
+}
+
+servidores = {
+  biblioteca-a = { instance_type = "t3.medium", disk_size = 30, subred = "pub_1" }
+  biblioteca-b = { instance_type = "t3.medium", disk_size = 30, subred = "pub_2" }
+  biblioteca-c = { instance_type = "t3.large",  disk_size = 60, subred = "pub_3" }
+  biblioteca-d = { instance_type = "t3.medium", disk_size = 30, subred = "pub_1" }
+}
+
+B. Abrir un Puerto Extra en el Security Group (main.tf)
+Si piden habilitar HTTPS (443) o SSH (22) en las instancias web, agrega otro bloque ingress dentro de tu aws_security_group:
+
+Terraform
+  ingress {
+    description = "Permitir HTTPS desde Internet"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+C. Modificar Condicionales de Producción (main.tf)
+Si piden cambiar el comportamiento cuando ambiente = "prod" (por ejemplo, triplicar el disco en vez de duplicarlo, o cambiar el tamaño de la RDS):
+
+Terraform
+# Ejemplo en volumen de EC2:
+volume_size = var.ambiente == "prod" ? each.value.disk_size * 3 : each.value.disk_size
+
+# Ejemplo en almacenamiento de RDS:
+allocated_storage = var.ambiente == "prod" ? 50 : 20
+
+D. Agregar una Segunda Base de Datos RDS (main.tf + outputs.tf)
+En main.tf: Copia el recurso aws_db_instance existente, cámbiale el nombre lógico (ej. rds_secundaria) y asegúrate de cambiarle el identifier para evitar errores en AWS:
+
+Terraform
+resource "aws_db_instance" "rds_secundaria" {
+  identifier             = "${var.proyecto}-db-secundaria-${var.ambiente}"
+  allocated_storage      = 20
+  engine                 = "mysql"
+  engine_version         = "8.0"
+  instance_class         = "db.t3.micro"
+  db_name                = "respaldo"
+  username               = "admin"
+  password               = var.db_password
+  db_subnet_group_name   = aws_db_subnet_group.rds_subnets.name
+  vpc_security_group_ids = [aws_security_group.rds_sg.id]
+  skip_final_snapshot    = true
+}
+
+En outputs.tf: Agrega su salida para poder obtener su endpoint:
+
+Terraform
+output "rds_secundaria_endpoint" {
+  description = "Endpoint de la segunda base de datos RDS"
+  value       = aws_db_instance.rds_secundaria.endpoint
+}
+
+
+
+E. Agregar una Nueva Variable Global (variable.tf + terraform.tfvars)
+Si piden agregar un parámetro nuevo (por ejemplo, curso o centro_costo para las etiquetas):
+
+En variable.tf:
+
+Terraform
+variable "curso" {
+  description = "Nombre o sigla del curso"
+  type        = string
+  default     = "INF-2026"
+}
+En terraform.tfvars:
+
+Terraform
+curso = "AUY1102"
