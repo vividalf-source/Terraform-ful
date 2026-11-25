@@ -1,0 +1,134 @@
+# 🚀 Despliegue y Validación de Infraestructura en AWS con Terraform
+
+Esta guía detalla el paso a paso para inicializar, desplegar, validar y destruir la infraestructura en AWS utilizando **Terraform** desde **PowerShell (Windows)**.
+
+---
+
+## 📋 Prerrequisitos
+
+* Tener instalado **Terraform** y **AWS CLI**.
+* Contar con credenciales de AWS configuradas activamente (`aws configure` o variables de sesión).
+* Ejecutar los comandos desde la terminal de **PowerShell** en el directorio raíz del proyecto.
+
+---
+
+## 🔐 1. Configurar Variables Sensibles
+
+Nunca escribas contraseñas directamente en los archivos `.tf` o `.tfvars`. Pasa la contraseña de la base de datos mediante una variable de entorno antes de ejecutar cualquier comando de Terraform:
+
+```powershell
+$env:TF_VAR_db_password="PasswordPrueba2026"
+
+⚙️ 2. Inicializar, Validar y Desplegar (dev)
+Ejecuta los siguientes comandos en orden para preparar el entorno, formatear el código, validar la sintaxis y levantar los recursos en el ambiente por defecto (dev)
+
+# Descargar providers y módulos necesarios
+terraform init
+
+# Formatear archivos .tf recursivamente
+terraform fmt -recursive
+
+# Validar la sintaxis y configuración
+terraform validate
+
+# Previsualizar los recursos que se crearán
+terraform plan
+
+# Aplicar los cambios sin confirmación interactiva
+terraform apply -auto-approve
+
+⏳ Nota: El aprovisionamiento de la base de datos Amazon RDS demora entre 5 y 10 minutos. Espera hasta que la consola muestre el mensaje Apply complete!.
+
+
+✅ 3. Validación de Servicios Desplegados
+Una vez finalizado el despliegue, verifica el correcto funcionamiento de cada componente:
+
+A. Probar acceso por Internet al Network Load Balancer (NLB)
+Fuerza el protocolo http:// con curl.exe en PowerShell para comprobar que el balanceador responde y distribuye el tráfico entre las instancias EC2:
+
+PowerShell
+curl.exe http://$(terraform output -raw nlb_dns_name)
+
+B. Probar el Bucket S3 (Subida y Listado)
+Crea un archivo de prueba local, lista tus buckets disponibles y súbelo para validar permisos:
+
+# Crear archivo de prueba
+echo "prueba" > test.txt
+
+# Listar buckets para obtener el nombre exacto
+aws s3 ls
+
+# Subir el archivo al bucket (reemplaza el nombre según el paso anterior)
+aws s3 cp test.txt s3://<NOMBRE_DEL_BUCKET>/
+
+
+
+C. Verificar aislamiento de la base de datos RDS (Desde tu PC local)
+Comprueba que la base de datos se encuentra protegida en una subred privada y no es accesible desde Internet:
+
+
+Obtén el endpoint de la base de datos: terraform output -raw rds_endpoint
+
+Ejecuta una prueba de conexión desde PowerShell quitando el puerto :3306 del final:
+
+Test-NetConnection -ComputerName <ENDPOINT_RDS_SIN_PUERTO> -Port 3306
+
+✔️ Resultado esperado: Debe devolver TcpTestSucceeded : False (o agotar el tiempo de espera).
+
+
+D. Conectarse a la RDS desde una instancia EC2 (biblioteca-a)
+Para confirmar que la comunicación interna dentro de la VPC funciona correctamente:
+
+Ingresa a la Consola de AWS ➔ EC2 ➔ Instancias.
+
+Selecciona la instancia biblioteca-a y conéctate mediante EC2 Instance Connect (o SSH).
+
+Dentro de la terminal de la instancia, conéctate a MySQL usando el endpoint (sin :3306):
+
+
+mysql -h <ENDPOINT_RDS_SIN_PUERTO> -u admin -p
+
+🧪 4. Simular el Ambiente prod (Dry-Run)
+Sin salir de tu terminal PowerShell en VS Code, ejecuta un plan simulando las variables del entorno de producción sin aplicar cambios reales:
+
+PowerShell
+terraform plan -var="ambiente=prod"
+
+
+🔍 Verificación: Revisa la salida en consola y confirma que el plan proyecta:
+
+Duplicar el tamaño de disco de los 3 servidores EC2.
+
+Activar multi_az = true en la instancia RDS.
+
+Cambiar el versionado del bucket S3 a "Enabled".
+
+🧹 5. Destruir la Infraestructura
+Cuando termines las pruebas, elimina todos los recursos creados para evitar costos innecesarios:
+
+terraform destroy -auto-approve
+
+⚠️ Solución de problemas al eliminar el Bucket S3
+Si terraform destroy falla con el error AccessDenied: s3:GetBucketObjectLockConfiguration (común en cuentas de laboratorio como AWS Academy), retira el bucket del estado de Terraform y elimínalo manualmente mediante AWS CLI:
+
+
+Quitar el bucket del archivo de estado (.tfstate):
+
+PowerShell
+terraform state rm aws_s3_bucket.bucket
+Completar la eliminación del resto de la infraestructura:
+
+PowerShell
+terraform destroy -auto-approve
+Vaciar y eliminar el bucket manualmente:
+
+PowerShell
+aws s3 rb s3://<NOMBRE_DEL_BUCKET> --force
+📌 Comandos Útiles de Referencia
+Comando	Descripción
+terraform output	Muestra todas las salidas definidas en outputs.tf (DNS del NLB, endpoint RDS, etc.).
+terraform state list	Lista todos los recursos actualmente gestionados en el estado de Terraform.
+terraform fmt -check	Verifica si los archivos cumplen con el formato estándar sin modificarlos.
+
+
+
