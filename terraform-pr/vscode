@@ -1,0 +1,35 @@
+HashiCorp Terraform (oficial de HashiCorp)
+
+Tu comodín principal: Te da autocompletado inteligente (Ctrl + Espacio) para todos los recursos de AWS (aws_instance, aws_subnet, aws_db_instance, etc.), te marca en rojo si te falta un argumento obligatorio o si escribiste mal el nombre de un atributo antes de correr terraform validate, y formatea el código automáticamente.
+
+Error Lens
+
+Te ahorra leer logs largos: En vez de tener que pasar el mouse por encima de una línea subrayada en rojo o amarillo, te muestra el mensaje de error directamente al lado derecho de la línea de código mientras escribes.
+
+Rainbow CSV (opcional) / Indent-Rainbow
+
+Indent-Rainbow colorea cada nivel de sangría en los bloques { ... } de Terraform. Cuando tienes mapas anidados o condicionales (for_each, ingress, tags), ves al tiro si cerraste mal una llave }.
+
+Auto Close Tag / Bracket Pair Colorization (ya viene nativo en VS Code, asegúrate de tenerlo activo)
+
+Pinta de distintos colores cada par de llaves { }, corchetes [ ] y paréntesis ( ) para no perderte cuando armas listas o expresiones for.
+
+AWS Toolkit (opcional, solo si te dejan usarlo)
+
+Te permite ver tus recursos creados en AWS (EC2, S3, RDS, VPC) directamente desde una barra lateral en VS Code sin tener que abrir el navegador a cada rato. (Ojo: con AWS Academy a veces pide renovar credenciales manualmente, así que si no lo tienes configurado ya, no pierdas tiempo mañana configurándolo; usa la consola web o AWS CLI).
+
+⚡ Trucos y Comodines Nativos de VS Code (Sin instalar nada)
+Autocompletar argumentos de cualquier recurso (Ctrl + Espacio):
+Si mañana te piden agregar un bloque nuevo (por ejemplo, un aws_security_group_rule o un atributo dentro de aws_db_instance) y no te acuerdas del nombre exacto del parámetro, párate dentro de las llaves { } y presiona Ctrl + Espacio. La extensión de HashiCorp te desplegará toda la lista de atributos válidos y si son obligatorios (Required) u opcionales (Optional).
+
+Formateo instantáneo al guardar (Shift + Alt + F):
+Ordena automáticamente todos los signos = y las llaves de tu .tf o .tfvars para que quede limpio y fácil de leer.
+
+Terminal integrada dividida (Ctrl + Shift + 5 o el ícono de dividir terminal):
+Ten abierta una terminal en PowerShell solo para ejecutar comandos de Terraform (plan, apply, output) y otra al lado para comandos de validación (curl.exe, aws s3 ls, Test-NetConnection) sin tener que borrar o subir a cada rato.
+
+Ir directo a la definición (F12 o Ctrl + Clic):
+Si haces Ctrl + Clic sobre cualquier variable (por ejemplo var.subredes en main.tf), VS Code te lleva directo a dónde está declarada en variable.tf.
+
+Buscar en todos los archivos a la vez (Ctrl + Shift + F):
+Si te piden cambiar el nombre de un tag, un puerto o una variable en todo el proyecto, usa búsqueda global para asegurarte de que no te quedó ningún archivo sin actualizar.
